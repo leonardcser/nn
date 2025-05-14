@@ -1,17 +1,17 @@
-import type { Route } from "./+types/home";
-import { wasmFetcher } from "../utils/fetchers";
-import { useState } from "react";
+import type { Route } from './+types/home';
+import { wasmFetcher } from '../utils/fetchers';
+import { useState } from 'react';
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Neural Network from Scratch" },
-    { name: "description", content: "Neural Network from Scratch" },
+    { title: 'Neural Network from Scratch' },
+    { name: 'description', content: 'Neural Network from Scratch' },
   ];
 }
 
 export async function clientLoader() {
   return {
-    wasmInstance: await wasmFetcher(import.meta.env.BASE_URL + "/output.wasm"),
+    wasmInstance: await wasmFetcher(import.meta.env.BASE_URL + '/output.wasm'),
   };
 }
 
@@ -55,8 +55,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </button>
       {sum !== null && (
         <p className="mt-4 text-lg">
-          Result of {num1} + {num2}:{" "}
-          <span className="font-semibold">{sum}</span>
+          Result of {num1} + {num2}: <span className="font-semibold">{sum}</span>
         </p>
       )}
     </div>

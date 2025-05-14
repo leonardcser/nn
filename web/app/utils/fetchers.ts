@@ -5,9 +5,7 @@ export interface WasmExports {
 export async function wasmFetcher(url: string): Promise<WasmExports> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch Wasm module: ${response.statusText} (URL: ${response.url})`
-    );
+    throw new Error(`Failed to fetch Wasm module: ${response.statusText} (URL: ${response.url})`);
   }
 
   const wasmBuffer = await response.arrayBuffer();
