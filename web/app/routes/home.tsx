@@ -11,7 +11,7 @@ export function meta({}: Route.MetaArgs) {
 
 export async function clientLoader() {
   return {
-    wasmInstance: await wasmFetcher("/output.wasm"),
+    wasmInstance: await wasmFetcher(import.meta.env.BASE_URL + "/output.wasm"),
   };
 }
 
