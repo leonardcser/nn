@@ -4,8 +4,8 @@ import { useState } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
+    { title: "Neural Network from Scratch" },
+    { name: "description", content: "Neural Network from Scratch" },
   ];
 }
 
@@ -13,10 +13,6 @@ export async function clientLoader() {
   return {
     wasmInstance: await wasmFetcher("/output.wasm"),
   };
-}
-
-export function HydrateFallback() {
-  return <div>Loading...</div>;
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
