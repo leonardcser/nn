@@ -11,7 +11,7 @@ interface.
 - C++
 - Emscripten
 - WebAssembly (WASM)
-- React Router (formely Remix)
+- Astro
 
 ## Prerequisites
 

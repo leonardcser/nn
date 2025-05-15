@@ -1,0 +1,17 @@
+---
+import '../styles/global.css';
+import NeuralNetwork from '../lib/components/NeuralNetwork';
+import Head from '../lib/components/Head.astro';
+---
+
+<html lang="en">
+	<head>
+		<Head title="Neural Network WASM" description="Neural Network WASM" />
+	</head>
+	<body>
+		<main class="max-w-screen-lg mx-auto p-8">
+			<h1 class="text-3xl font-bold mb-4">Neural Network WASM</h1>
+			<NeuralNetwork client:load />
+		</main>
+	</body>
+</html>
