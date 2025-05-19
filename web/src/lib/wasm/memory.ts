@@ -2,14 +2,23 @@ import { FieldType, type StructDescriptor, type WasmExports } from './types';
 
 export const fieldTypeToSize: Record<FieldType, number> = {
   [FieldType.Int32]: 4,
+  [FieldType.Float32]: 4,
+  [FieldType.Uint32]: 4,
+  [FieldType.Ptr]: 4, // Ptr is essentially a Uint32
 };
 
 export const fieldTypeToDataViewSetter: Record<FieldType, keyof DataView> = {
   [FieldType.Int32]: 'setInt32',
+  [FieldType.Float32]: 'setFloat32',
+  [FieldType.Uint32]: 'setUint32',
+  [FieldType.Ptr]: 'setUint32', // Ptr is essentially a Uint32
 };
 
 export const fieldTypeToDataViewGetter: Record<FieldType, keyof DataView> = {
   [FieldType.Int32]: 'getInt32',
+  [FieldType.Float32]: 'getFloat32',
+  [FieldType.Uint32]: 'getUint32',
+  [FieldType.Ptr]: 'getUint32', // Ptr is essentially a Uint32
 };
 
 export function calculateStructSize<T extends Record<string, any>>(

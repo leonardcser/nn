@@ -7,18 +7,25 @@ import {
 } from './memory';
 
 export class WStruct<T extends Record<string, any>> {
-  private _ptr: number;
+  protected _ptr: number;
   private structSize: number;
 
   constructor(
-    private exports: WasmExports,
+    protected exports: WasmExports,
     private descriptor: StructDescriptor<T>,
-    initialData: T
+    source?: number | T
   ) {
     this.structSize = calculateStructSize(this.descriptor);
-    this._ptr = serializeStruct(this.exports, initialData, this.descriptor);
-    if (this._ptr === 0) {
-      throw new Error('Failed to allocate Wasm memory for ManagedWasmStruct');
+    if (typeof source === 'number') {
+      this._ptr = source;
+      if (this._ptr === 0) {
+        throw new Error('WStruct initialized with null pointer.');
+      }
+    } else {
+      this._ptr = serializeStruct(this.exports, source ?? ({} as T), this.descriptor);
+      if (this._ptr === 0) {
+        throw new Error('Failed to allocate Wasm memory for WStruct (from initial data)');
+      }
     }
   }
 

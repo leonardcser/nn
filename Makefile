@@ -1,9 +1,9 @@
 CXX = emcc
-CXXFLAGS = -Os -Wall -Wextra -Wswitch-enum --no-entry
+CXXFLAGS = -O3 -Wall -Wextra -Wswitch-enum --no-entry
 LDFLAGS = -sALLOW_MEMORY_GROWTH=1 -sEXPORT_ALL=1
 
 INCLUDES = -Isrc/core
-SRC = src/wasm/memory.cpp src/wasm/nn.cpp
+SRC = src/wasm/memory.cpp src/wasm/nn.cpp src/core/nn.cpp
 
 BUILD_DIR = web/public
 TARGET = $(BUILD_DIR)/output.wasm

@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Use pnpm
+- The cpp codebase is located at /src and the astro & react is located under /web
+- The cpp exposes wasm binding under /src/wasm/* which are used in the web application
