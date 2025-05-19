@@ -1,6 +1,6 @@
 CXX = emcc
-CXXFLAGS = -Os -Wall -Wextra -Wswitch-enum
-LDFLAGS = -sSIDE_MODULE=1
+CXXFLAGS = -Os -Wall -Wextra -Wswitch-enum --no-entry
+LDFLAGS = -sALLOW_MEMORY_GROWTH=1 -sEXPORT_ALL=1
 
 INCLUDES = -Isrc/core
 SRC = src/wasm/bindings.cpp
