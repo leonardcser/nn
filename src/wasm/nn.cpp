@@ -9,18 +9,6 @@ struct __attribute__((packed)) Point {
 
 extern "C" {
 
-// Generic memory allocation utilities
-EMSCRIPTEN_KEEPALIVE
-void* allocate_memory(size_t size) {
-    void* ptr = malloc(size);
-    return ptr;
-}
-
-EMSCRIPTEN_KEEPALIVE
-void free_memory(void* ptr) {
-    free(ptr);
-}
-
 // Function to add two points, result stored in an output parameter
 EMSCRIPTEN_KEEPALIVE
 void add_points(Point* p1, Point* p2, Point* result_out) {

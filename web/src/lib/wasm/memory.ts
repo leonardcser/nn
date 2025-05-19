@@ -22,17 +22,18 @@ export function calculateStructSize<T extends Record<string, any>>(
   return size;
 }
 
-export function serializeStruct<T extends Record<string, any>>(
+// New function to write struct data to an existing memory location
+export function writeStructToMemory<T extends Record<string, any>>(
   exports: WasmExports,
+  ptr: number,
   data: T,
-  descriptor: StructDescriptor<T>
-): number {
-  const size = calculateStructSize(descriptor);
-  const ptr = exports.allocate_memory(size);
+  descriptor: StructDescriptor<T>,
+  structSize: number // Pass calculated size to avoid recalculation and ensure consistency
+): void {
   if (ptr === 0) {
-    throw new Error('WASM memory allocation failed');
+    throw new Error('WASM memory write failed: pointer is null');
   }
-  const memoryView = new DataView(exports.memory.buffer, ptr, size);
+  const memoryView = new DataView(exports.memory.buffer, ptr, structSize);
   let offset = 0;
   for (const key in descriptor) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
@@ -53,6 +54,20 @@ export function serializeStruct<T extends Record<string, any>>(
       offset += fieldTypeToSize[fieldType];
     }
   }
+}
+
+export function serializeStruct<T extends Record<string, any>>(
+  exports: WasmExports,
+  data: T,
+  descriptor: StructDescriptor<T>
+): number {
+  const size = calculateStructSize(descriptor);
+  const ptr = exports.allocate_memory(size);
+  if (ptr === 0) {
+    throw new Error('WASM memory allocation failed during serializeStruct');
+  }
+  // Use the new helper function to write the data
+  writeStructToMemory(exports, ptr, data, descriptor, size);
   return ptr;
 }
 

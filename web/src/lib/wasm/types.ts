@@ -5,11 +5,6 @@ export interface WasmExports {
   add_points: (ptr1: number, ptr2: number, resultPtr: number) => void;
 }
 
-export interface Point {
-  x: number;
-  y: number;
-}
-
 export enum FieldType {
   Int32,
   // Add other types like Float32, Int8, etc. as needed
@@ -18,3 +13,8 @@ export enum FieldType {
 export type StructDescriptor<T extends Record<string, any>> = {
   [K in keyof T]: FieldType;
 };
+
+export interface Point {
+  x: number;
+  y: number;
+}

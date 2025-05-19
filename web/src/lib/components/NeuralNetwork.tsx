@@ -1,14 +1,6 @@
 import useSWR from 'swr';
 import { useState } from 'react';
-import {
-  wasmFetcher,
-  type WasmExports,
-  type Point,
-  serializeStruct,
-  deserializeStruct,
-  pointDescriptor,
-  calculateStructSize,
-} from '../wasm';
+import { wasmFetcher, type WasmExports, type Point, WPoint } from '../wasm';
 import { cn } from '../utils';
 
 export default function NeuralNetwork() {
@@ -32,35 +24,26 @@ export default function NeuralNetwork() {
     setError(null);
     setResultPoint(null);
 
-    let p1Ptr = 0;
-    let p2Ptr = 0;
-    let resultPtr = 0;
+    let p1: WPoint | null = null;
+    let p2: WPoint | null = null;
+    let result: WPoint | null = null;
 
     try {
-      const point1: Point = { x: point1X, y: point1Y };
-      const point2: Point = { x: point2X, y: point2Y };
+      p1 = new WPoint(wasmInstance, { x: point1X, y: point1Y });
+      p2 = new WPoint(wasmInstance, { x: point2X, y: point2Y });
+      result = new WPoint(wasmInstance, { x: 0, y: 0 });
 
-      p1Ptr = serializeStruct(wasmInstance, point1, pointDescriptor);
-      p2Ptr = serializeStruct(wasmInstance, point2, pointDescriptor);
-      resultPtr = wasmInstance.allocate_memory(calculateStructSize(pointDescriptor));
+      wasmInstance.add_points(p1.ptr(), p2.ptr(), result.ptr());
 
-      if (p1Ptr === 0 || p2Ptr === 0 || resultPtr === 0) {
-        throw new Error('Memory allocation failed for one of the points.');
-      }
-
-      wasmInstance.add_points(p1Ptr, p2Ptr, resultPtr);
-      const result = deserializeStruct(wasmInstance, resultPtr, pointDescriptor);
-      setResultPoint(result);
+      setResultPoint(result.data());
     } catch (e: any) {
       console.error('Error in handleAddPoints:', e);
       setError(`Error: ${e.message || 'An unknown error occurred.'}`);
       setResultPoint(null);
     } finally {
-      if (wasmInstance) {
-        if (p1Ptr !== 0) wasmInstance.free_memory(p1Ptr);
-        if (p2Ptr !== 0) wasmInstance.free_memory(p2Ptr);
-        if (resultPtr !== 0) wasmInstance.free_memory(resultPtr);
-      }
+      p1?.free();
+      p2?.free();
+      result?.free();
     }
   };
 
