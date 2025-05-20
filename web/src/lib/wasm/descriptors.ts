@@ -37,8 +37,7 @@ const trainConfigDescriptor: StructDescriptor<TrainConfig> = {
   loss_type: FieldType.Int32, // enum LossFunctionType
   _compute_loss_func: FieldType.Ptr, // ComputeLossPtr
   _loss_derivative_func: FieldType.Ptr, // LossDerivativePtr
-  epoch_callback_func: FieldType.Ptr, // EpochCompletedCallback
-  epoch_callback_user_data: FieldType.Ptr, // void*
+  epoch_callback_func_id: FieldType.Ptr, // EpochCompletedCallback
   print_progress_every_n_batches: FieldType.Int32,
 };
 

@@ -171,8 +171,7 @@ struct __attribute__((packed)) TrainConfig {
     LossDerivativePtr _loss_derivative_func; // e.g., derivative_mean_squared_error
 
     // Optional: Callback after each epoch
-    EpochCompletedCallback epoch_callback_func;
-    void* epoch_callback_user_data;
+    int epoch_callback_func_id; // -1 to disable
 
     int print_progress_every_n_batches; // 0 to disable
 };

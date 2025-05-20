@@ -41,6 +41,10 @@ export interface WasmExports {
   ) => number; // returns float (average batch loss)
   nn_get_model_output: (model_ptr: number) => number; // returns float*
   nn_predict: (model_ptr: number, input_sample_ptr: number) => number; // returns float*
+
+  // JS defined functions
+  register_callback: (func: (data?: DataView) => void) => number;
+  _callback: (id: number, data: number, data_size: number) => void;
 }
 
 export type WasmSymbol = keyof WasmExports;
@@ -113,9 +117,7 @@ export interface TrainConfig {
   loss_type: LossFunctionType; // enum
   _compute_loss_func: number; // ComputeLossPtr
   _loss_derivative_func: number; // LossDerivativePtr
-  // Optional: Callback after each epoch
-  epoch_callback_func: number; // EpochCompletedCallback (function pointer)
-  epoch_callback_user_data: number; // void*
+  epoch_callback_func_id: number; // int (-1 to disable)
   print_progress_every_n_batches: number; // int
 }
 

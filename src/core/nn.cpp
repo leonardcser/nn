@@ -1,4 +1,5 @@
 #include "nn.h"
+#include "../wasm/utility.cpp"
 
 #include <vector>
 #include <numeric>      // For std::iota
@@ -744,7 +745,6 @@ void train_model(
 
             epoch_loss_sum += average_batch_loss * num_samples_in_current_batch; // Accumulate total loss for the epoch
 
-            printf("Print progress every n batches: %d\n", config->print_progress_every_n_batches);
             if (config->print_progress_every_n_batches > 0 && (batch_idx + 1) % config->print_progress_every_n_batches == 0) {
                 printf("Epoch [%d/%d], Batch [%d/%d], Avg Batch Loss: %f\n",
                           epoch + 1, config->epochs,
@@ -770,8 +770,8 @@ void train_model(
 
 
         // Call the epoch completed callback if provided
-        if (config->epoch_callback_func) {
-            config->epoch_callback_func(epoch + 1, average_training_loss_for_epoch, calculated_validation_loss, config->epoch_callback_user_data);
+        if (config->epoch_callback_func_id >= 0) {
+            _callback(config->epoch_callback_func_id, (void*)&average_training_loss_for_epoch, sizeof(average_training_loss_for_epoch));
         }
     }
 

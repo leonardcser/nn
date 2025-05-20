@@ -1,3 +1,4 @@
+import { _callback, register_callback } from './function';
 import { type WasmExports, WASM_SYMBOLS } from './types';
 
 export async function wasmFetcher(url: string): Promise<WasmExports> {
@@ -16,6 +17,9 @@ export async function wasmFetcher(url: string): Promise<WasmExports> {
         abort: (reasonCodeOrPtr: number) => {
           console.error(`Wasm execution aborted. Reason: ${reasonCodeOrPtr}`);
           throw new Error(`Wasm execution aborted. Reason: ${reasonCodeOrPtr}`);
+        },
+        _callback: (id: number, data: number, data_size: number) => {
+          _callback(instance.exports as unknown as WasmExports, id, data, data_size);
         },
       },
       wasi_snapshot_preview1: {
@@ -115,64 +119,6 @@ export async function wasmFetcher(url: string): Promise<WasmExports> {
           }
           return 0; // WASI errno for success
         },
-        environ_sizes_get: (
-          environ_count_ptr: number, // size*
-          environ_buf_size_ptr: number // size*
-        ): number => {
-          const exports = instance.exports as unknown as WasmExports;
-          const memory = exports.memory;
-          if (!memory) {
-            console.error('environ_sizes_get: memory is not available');
-            return 1; // WASI errno for EPERM or similar
-          }
-          const memoryView = new DataView(memory.buffer);
-
-          // For a stub, we'll report 0 environment variables and 0 buffer size.
-          memoryView.setUint32(environ_count_ptr, 0, true);
-          memoryView.setUint32(environ_buf_size_ptr, 0, true);
-          return 0; // WASI errno for success
-        },
-        environ_get: (
-          environ_ptr: number, // u8**
-          environ_buf_ptr: number // u8*
-        ): number => {
-          // Since environ_sizes_get returns 0, this function should not be called
-          // with non-zero buffer sizes, or if it is, it doesn't need to write anything.
-          const exports = instance.exports as unknown as WasmExports;
-          const memory = exports.memory;
-          if (!memory) {
-            console.error('environ_get: memory is not available');
-            return 1; // WASI errno for EPERM or similar
-          }
-          // const memoryView = new DataView(memory.buffer);
-          // No data to write since we report 0 env vars.
-          return 0; // WASI errno for success
-        },
-        clock_time_get: (
-          clock_id: number, // clockid
-          precision: bigint, // timestamp
-          time_ptr: number // timestamp*
-        ): number => {
-          const exports = instance.exports as unknown as WasmExports;
-          const memory = exports.memory;
-          if (!memory) {
-            console.error('clock_time_get: memory is not available');
-            return 1; // Or an appropriate WASI errno like EACCES or EPERM
-          }
-          const memoryView = new DataView(memory.buffer);
-
-          if (clock_id === 0) {
-            // CLOCK_REALTIME
-            // performance.now() gives milliseconds with microsecond precision.
-            // Date.now() gives milliseconds.
-            // We need nanoseconds for WASI.
-            const now_ns = BigInt(Date.now()) * BigInt(1000000);
-            memoryView.setBigUint64(time_ptr, now_ns, true);
-            return 0; // Success
-          }
-          console.warn(`clock_time_get called for unhandled clock_id: ${clock_id}`);
-          return 28; // WASI errno for EINVAL (Invalid argument)
-        },
       },
     };
     instance = await WebAssembly.instantiate(module, importObject);
@@ -198,6 +144,8 @@ export async function wasmFetcher(url: string): Promise<WasmExports> {
     if (!memory) {
       throw new Error("WASM module did not export 'memory'");
     }
+
+    functions.register_callback = register_callback;
 
     return { ...functions, memory } as unknown as WasmExports;
   } catch (error) {

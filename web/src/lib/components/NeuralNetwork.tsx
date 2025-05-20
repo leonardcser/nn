@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useEffect, useState, useRef } from 'react';
+import { useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -116,9 +116,11 @@ export default function NeuralNetwork() {
         loss_type: LossFunctionType.LOSS_MEAN_SQUARED_ERROR,
         _compute_loss_func: 0,
         _loss_derivative_func: 0,
-        epoch_callback_func: 0,
-        epoch_callback_user_data: 0,
-        print_progress_every_n_batches: 1,
+        epoch_callback_func_id: wasmInstance.register_callback((data?: DataView) => {
+          const loss = data?.getFloat32(0, true);
+          console.log(loss);
+        }),
+        print_progress_every_n_batches: 0,
       });
 
       const numSamples = XOR_YDATA.length;
