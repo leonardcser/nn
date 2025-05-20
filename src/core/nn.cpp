@@ -590,6 +590,46 @@ void model_zero_gradients(Model* model) {
 //------------------------------------------------------------------------------
 // Training
 //------------------------------------------------------------------------------
+
+// Performs a single training step on a given batch of data.
+float step_model(
+    Model* model,
+    const float* batch_inputs,
+    const float* batch_targets,
+    int num_samples_in_batch,
+    const TrainConfig* config
+) {
+    if (!model || !batch_inputs || !batch_targets || !config || num_samples_in_batch <= 0) {
+        // Consider throwing an error or returning a specific value like -1.0f or NaN
+        fprintf(stderr, "Error: Invalid arguments for step_model.\n");
+        return -1.0f; // Or handle error appropriately
+    }
+
+    model_zero_gradients(model); // Zero gradients at the start of each batch step
+
+    float batch_loss_sum = 0.0f;
+
+    for (int i = 0; i < num_samples_in_batch; ++i) {
+        const float* input_sample = batch_inputs + (i * model->model_input_dim);
+        const float* target_sample = batch_targets + (i * model->model_output_dim);
+
+        // Forward pass
+        model_forward_pass(model, input_sample);
+        // model->_final_output_buffer now contains the predictions
+
+        // Calculate loss for this sample
+        batch_loss_sum += config->_compute_loss_func(model->_final_output_buffer, target_sample, model->model_output_dim);
+
+        // Backward pass (accumulates gradients)
+        model_backward_pass(model, target_sample, config);
+    }
+
+    // Update weights based on accumulated gradients for the batch
+    model_update_weights(model, config->learning_rate, num_samples_in_batch);
+    
+    return batch_loss_sum / static_cast<float>(num_samples_in_batch); // Average loss for the batch
+}
+
 void train_model(
     Model* model,
     const Dataset* train_data,
@@ -635,55 +675,85 @@ void train_model(
 
     int num_batches = (train_data->num_samples + config->batch_size - 1) / config->batch_size; // Ceiling division
 
+    std::vector<int> sample_indices(train_data->num_samples);
+    std::iota(sample_indices.begin(), sample_indices.end(), 0); // Fill with 0, 1, ..., n-1
+
+    // Temporary buffers for batch data if shuffling
+    float* shuffled_batch_inputs = nullptr;
+    float* shuffled_batch_targets = nullptr;
+    if (config->shuffle_each_epoch) {
+        // Allocate only once if batch size is consistent, or handle dynamic allocation if batch size can vary (though it's fixed in TrainConfig)
+        // Ensure these buffers are large enough for the maximum batch size (config->batch_size)
+        shuffled_batch_inputs = new float[config->batch_size * train_data->input_dim];
+        shuffled_batch_targets = new float[config->batch_size * train_data->output_dim];
+    }
+    
     for (int epoch = 0; epoch < config->epochs; ++epoch) {
 
-        float epoch_loss = 0.0f;
+        float epoch_loss_sum = 0.0f;
+
+        if (config->shuffle_each_epoch) { 
+           std::shuffle(sample_indices.begin(), sample_indices.end(), random_generator);
+        }
 
         for (int batch_idx = 0; batch_idx < num_batches; ++batch_idx) {
-            model_zero_gradients(model); // Zero gradients at the start of each batch
+            int start_sample_idx_in_dataset = batch_idx * config->batch_size;
+            int num_samples_in_current_batch = 0;
 
-            int current_batch_size = 0;
-            float batch_loss_sum = 0.0f;
+            // Determine the actual number of samples in this batch (can be smaller for the last batch)
+            if (start_sample_idx_in_dataset + config->batch_size <= train_data->num_samples) {
+                num_samples_in_current_batch = config->batch_size;
+            } else {
+                num_samples_in_current_batch = train_data->num_samples - start_sample_idx_in_dataset;
+            }
 
-            for (int i = 0; i < config->batch_size; ++i) {
-                int sample_overall_idx = batch_idx * config->batch_size + i;
-                if (sample_overall_idx >= train_data->num_samples) {
-                    break; // Reached end of dataset (last batch might be smaller)
+            if (num_samples_in_current_batch <= 0) {
+                continue; // Should not happen if num_batches is calculated correctly
+            }
+
+            // Get pointers to the data for the current batch
+            // If shuffling is implemented, use sample_indices[start_sample_idx_in_dataset + i] to get actual data
+            const float* current_batch_inputs_ptr;
+            const float* current_batch_targets_ptr;
+
+            if (config->shuffle_each_epoch) {
+                // Copy shuffled data to temporary batch buffers
+                for (int k = 0; k < num_samples_in_current_batch; ++k) {
+                    int original_sample_idx = sample_indices[start_sample_idx_in_dataset + k];
+                    // Copy input features
+                    std::copy(
+                        train_data->_inputs_flat + (original_sample_idx * train_data->input_dim),
+                        train_data->_inputs_flat + (original_sample_idx * train_data->input_dim) + train_data->input_dim,
+                        shuffled_batch_inputs + (k * train_data->input_dim)
+                    );
+                    // Copy target features
+                    std::copy(
+                        train_data->_targets_flat + (original_sample_idx * train_data->output_dim),
+                        train_data->_targets_flat + (original_sample_idx * train_data->output_dim) + train_data->output_dim,
+                        shuffled_batch_targets + (k * train_data->output_dim)
+                    );
                 }
-                current_batch_size++;
-
-                int current_sample_idx = sample_overall_idx; // Use direct index
-                
-                const float* input_sample = train_data->_inputs_flat + (current_sample_idx * train_data->input_dim);
-                const float* target_sample = train_data->_targets_flat + (current_sample_idx * train_data->output_dim);
-
-                // Forward pass
-                model_forward_pass(model, input_sample);
-                // model->_final_output_buffer now contains the predictions
-
-                // Calculate loss for this sample (optional for accumulation, but good for tracking)
-                batch_loss_sum += config->_compute_loss_func(model->_final_output_buffer, target_sample, model->model_output_dim);
-
-                // Backward pass (accumulates gradients)
-                // Note: input_sample here must be the same one used for the forward pass whose results are still in layers.
-                model_backward_pass(model, target_sample, config);
+                current_batch_inputs_ptr = shuffled_batch_inputs;
+                current_batch_targets_ptr = shuffled_batch_targets;
+            } else {
+                current_batch_inputs_ptr = train_data->_inputs_flat + (start_sample_idx_in_dataset * train_data->input_dim);
+                current_batch_targets_ptr = train_data->_targets_flat + (start_sample_idx_in_dataset * train_data->output_dim);
             }
 
-            if (current_batch_size > 0) {
-                // Update weights based on accumulated gradients for the batch
-                model_update_weights(model, config->learning_rate, current_batch_size);
-                epoch_loss += batch_loss_sum; // Accumulate sum of losses for all samples in epoch
-            }
-            
+            float average_batch_loss = step_model(model, current_batch_inputs_ptr, current_batch_targets_ptr, num_samples_in_current_batch, config);
+
+            epoch_loss_sum += average_batch_loss * num_samples_in_current_batch; // Accumulate total loss for the epoch
+
+            printf("Print progress every n batches: %d\n", config->print_progress_every_n_batches);
             if (config->print_progress_every_n_batches > 0 && (batch_idx + 1) % config->print_progress_every_n_batches == 0) {
                 printf("Epoch [%d/%d], Batch [%d/%d], Avg Batch Loss: %f\n",
                           epoch + 1, config->epochs,
                           batch_idx + 1, num_batches,
-                          (current_batch_size > 0 ? (batch_loss_sum / current_batch_size) : 0.0f));
+                          average_batch_loss);
             }
         }
 
-        float average_training_loss_for_epoch = (train_data->num_samples > 0) ? (epoch_loss / train_data->num_samples) : 0.0f;
+        float average_training_loss_for_epoch = (train_data->num_samples > 0) ? (epoch_loss_sum / train_data->num_samples) : 0.0f;
         
         float calculated_validation_loss = -1.0f; // Signify not computed
         if (validation_data && validation_data->num_samples > 0) {
@@ -703,6 +773,12 @@ void train_model(
         if (config->epoch_callback_func) {
             config->epoch_callback_func(epoch + 1, average_training_loss_for_epoch, calculated_validation_loss, config->epoch_callback_user_data);
         }
+    }
+
+    // Clean up allocated batch buffers
+    if (config->shuffle_each_epoch) {
+        delete[] shuffled_batch_inputs;
+        delete[] shuffled_batch_targets;
     }
 }
 

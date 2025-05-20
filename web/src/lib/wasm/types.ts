@@ -32,14 +32,13 @@ export interface WasmExports {
     config_ptr: number, // TrainConfig*
     validation_data_ptr: number | null // Dataset* (optional, can be 0 for null)
   ) => void;
-  nn_model_forward_pass: (model_ptr: number, input_sample_ptr: number) => void;
-  nn_model_backward_pass: (
-    model_ptr: number,
-    target_sample_ptr: number, // float*
+  nn_step_model: (
+    model_ptr: number, // Model*
+    batch_inputs_ptr: number, // float*
+    batch_targets_ptr: number, // float*
+    num_samples_in_batch: number, // int
     config_ptr: number // TrainConfig*
-  ) => void;
-  nn_model_update_weights: (model_ptr: number, learning_rate: number, batch_size: number) => void;
-  nn_model_zero_gradients: (model_ptr: number) => void;
+  ) => number; // returns float (average batch loss)
   nn_get_model_output: (model_ptr: number) => number; // returns float*
   nn_predict: (model_ptr: number, input_sample_ptr: number) => number; // returns float*
 }
@@ -60,10 +59,7 @@ export const WASM_SYMBOLS: WasmSymbol[] = [
   'nn_create_dataset',
   'nn_free_dataset',
   'nn_train_model',
-  'nn_model_forward_pass',
-  'nn_model_backward_pass',
-  'nn_model_update_weights',
-  'nn_model_zero_gradients',
+  'nn_step_model',
   'nn_get_model_output',
   'nn_predict',
 ] as const;
@@ -113,6 +109,7 @@ export interface TrainConfig {
   epochs: number; // int
   batch_size: number; // int
   random_seed: number; // unsigned int -> Uint32
+  shuffle_each_epoch: number; // int (0 for false, 1 for true)
   loss_type: LossFunctionType; // enum
   _compute_loss_func: number; // ComputeLossPtr
   _loss_derivative_func: number; // LossDerivativePtr

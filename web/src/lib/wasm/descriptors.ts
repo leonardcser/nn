@@ -33,6 +33,7 @@ const trainConfigDescriptor: StructDescriptor<TrainConfig> = {
   epochs: FieldType.Int32,
   batch_size: FieldType.Int32,
   random_seed: FieldType.Uint32, // unsigned int
+  shuffle_each_epoch: FieldType.Int32, // bool (0 or 1)
   loss_type: FieldType.Int32, // enum LossFunctionType
   _compute_loss_func: FieldType.Ptr, // ComputeLossPtr
   _loss_derivative_func: FieldType.Ptr, // LossDerivativePtr

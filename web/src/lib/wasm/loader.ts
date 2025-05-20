@@ -187,8 +187,6 @@ export async function wasmFetcher(url: string): Promise<WasmExports> {
       );
     }
 
-    console.log('instance', instance);
-
     for (const key in exports) {
       if (typeof exports[key] === 'function') {
         functions[key] = exports[key] as CallableFunction;

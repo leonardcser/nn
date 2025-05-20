@@ -58,23 +58,14 @@ void nn_train_model(nn::Model* model, const nn::Dataset* train_data, nn::TrainCo
 }
 
 EMSCRIPTEN_KEEPALIVE
-void nn_model_forward_pass(nn::Model* model, const float* input_sample) {
-    nn::model_forward_pass(model, input_sample);
-}
-
-EMSCRIPTEN_KEEPALIVE
-void nn_model_backward_pass(nn::Model* model, const float* target_sample, const nn::TrainConfig* config) {
-    nn::model_backward_pass(model, target_sample, config);
-}
-
-EMSCRIPTEN_KEEPALIVE
-void nn_model_update_weights(nn::Model* model, float learning_rate, int batch_size) {
-    nn::model_update_weights(model, learning_rate, batch_size);
-}
-
-EMSCRIPTEN_KEEPALIVE
-void nn_model_zero_gradients(nn::Model* model) {
-    nn::model_zero_gradients(model);
+float nn_step_model(
+    nn::Model* model, 
+    const float* batch_inputs, // float*
+    const float* batch_targets, // float*
+    int num_samples_in_batch, 
+    const nn::TrainConfig* config
+) {
+    return nn::step_model(model, batch_inputs, batch_targets, num_samples_in_batch, config);
 }
 
 EMSCRIPTEN_KEEPALIVE

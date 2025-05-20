@@ -112,6 +112,7 @@ export default function NeuralNetwork() {
         epochs: EPOCHS,
         batch_size: BATCH_SIZE,
         random_seed: SEED,
+        shuffle_each_epoch: 1,
         loss_type: LossFunctionType.LOSS_MEAN_SQUARED_ERROR,
         _compute_loss_func: 0,
         _loss_derivative_func: 0,

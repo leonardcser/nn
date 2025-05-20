@@ -164,6 +164,7 @@ struct __attribute__((packed)) TrainConfig {
     int epochs;
     int batch_size;
     unsigned int random_seed; // For reproducible weight initialization and data shuffling
+    int shuffle_each_epoch; // Changed from bool to int (0 for false, 1 for true)
 
     LossFunctionType loss_type;
     ComputeLossPtr _compute_loss_func;         // e.g., loss_mean_squared_error
@@ -238,6 +239,21 @@ void train_model(
     const Dataset* train_data,
     TrainConfig* config,
     const Dataset* validation_data // Optional, can be NULL
+);
+
+// Performs a single training step on a given batch of data.
+// - model: The model to train.
+// - batch_inputs: Pointer to the input data for the current batch.
+// - batch_targets: Pointer to the target data for the current batch.
+// - num_samples_in_batch: The number of samples in the current batch.
+// - config: Training configuration (learning rate, loss functions, etc.).
+// Returns the average loss for the processed batch.
+float step_model(
+    Model* model,
+    const float* batch_inputs,
+    const float* batch_targets,
+    int num_samples_in_batch,
+    const TrainConfig* config
 );
 
 // --- Core Operations (might be internal, or exposed for advanced use) ---
