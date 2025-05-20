@@ -1,16 +1,7 @@
 import useSWR from 'swr';
-import { useState, useEffect } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { useState } from 'react';
+import Plot from 'react-plotly.js';
+import type { Layout as PlotlyLayout, Data as PlotlyData } from 'plotly.js';
 import {
   wasmFetcher,
   type WasmExports,
@@ -27,14 +18,12 @@ import { cn } from '../utils';
 const XOR_XDATA = [0, 0, 0, 1, 1, 0, 1, 1];
 const XOR_YDATA = [0, 1, 1, 0];
 const INPUT_DIM = 2;
-const HIDDEN_DIM = 20;
+const HIDDEN_DIM = 512;
 const OUTPUT_DIM = 1;
 const SEED = 0;
 const LR = 0.1;
-const EPOCHS = 1000;
+const EPOCHS = 5000;
 const BATCH_SIZE = 4;
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 export default function NeuralNetwork() {
   const { data: wasmInstance } = useSWR<WasmExports>(
@@ -199,46 +188,27 @@ export default function NeuralNetwork() {
     }
   };
 
-  const chartData = {
-    labels: lossHistory.map((_, index) => `Epoch ${index + 1}`),
-    datasets: [
-      {
-        label: 'Training Loss',
-        data: lossHistory,
-        fill: false,
-        borderColor: 'rgb(75, 192, 192)',
-        tension: 0.1,
-        pointRadius: 0,
-      },
-    ],
-  };
+  const plotlyData: PlotlyData[] = [
+    {
+      x: lossHistory.map((_, index) => index + 1),
+      y: lossHistory,
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Training Loss',
+      line: { color: 'rgb(75, 192, 192)' },
+    },
+  ];
 
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Training Loss Over Epochs',
-      },
+  const plotlyLayout: Partial<PlotlyLayout> = {
+    title: { text: 'Training Loss Over Epochs' },
+    xaxis: {
+      title: { text: 'Epoch' },
     },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Loss',
-        },
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Epoch',
-        },
-      },
+    yaxis: {
+      title: { text: 'Loss' },
+      rangemode: 'tozero',
     },
+    autosize: true,
   };
 
   return (
@@ -256,7 +226,12 @@ export default function NeuralNetwork() {
 
       {lossHistory.length > 0 && (
         <div className="mt-4">
-          <Line options={chartOptions} data={chartData} />
+          <Plot
+            data={plotlyData}
+            layout={plotlyLayout}
+            style={{ width: '100%', height: '100%' }}
+            useResizeHandler={true}
+          />
         </div>
       )}
     </div>
