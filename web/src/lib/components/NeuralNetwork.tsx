@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { Line } from 'react-chartjs-2';
 import {
   wasmFetcher,
   type WasmExports,
@@ -29,8 +30,8 @@ const INPUT_DIM = 2;
 const HIDDEN_DIM = 20;
 const OUTPUT_DIM = 1;
 const SEED = 0;
-const LR = 0.075;
-const EPOCHS = 500;
+const LR = 0.1;
+const EPOCHS = 1000;
 const BATCH_SIZE = 4;
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -42,6 +43,7 @@ export default function NeuralNetwork() {
   );
 
   const [isTraining, setIsTraining] = useState(false);
+  const [lossHistory, setLossHistory] = useState<number[]>([]);
 
   const startTraining = async () => {
     if (!wasmInstance) {
@@ -50,6 +52,7 @@ export default function NeuralNetwork() {
     }
 
     setIsTraining(true);
+    setLossHistory([]); // Reset loss history at the start of training
     console.log('Starting training...');
 
     let model: WModel | null = null;
@@ -118,7 +121,9 @@ export default function NeuralNetwork() {
         _loss_derivative_func: 0,
         epoch_callback_func_id: wasmInstance.register_callback((data?: DataView) => {
           const loss = data?.getFloat32(0, true);
-          console.log(loss);
+          if (loss !== undefined) {
+            setLossHistory((prevHistory) => [...prevHistory, loss]);
+          }
         }),
         print_progress_every_n_batches: 0,
       });
@@ -194,6 +199,48 @@ export default function NeuralNetwork() {
     }
   };
 
+  const chartData = {
+    labels: lossHistory.map((_, index) => `Epoch ${index + 1}`),
+    datasets: [
+      {
+        label: 'Training Loss',
+        data: lossHistory,
+        fill: false,
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1,
+        pointRadius: 0,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: 'Training Loss Over Epochs',
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: 'Loss',
+        },
+      },
+      x: {
+        title: {
+          display: true,
+          text: 'Epoch',
+        },
+      },
+    },
+  };
+
   return (
     <div
       className={cn('opacity-0 transition-opacity duration-300 p-4', wasmInstance && 'opacity-100')}
@@ -206,6 +253,12 @@ export default function NeuralNetwork() {
         {isTraining ? 'Training...' : 'Start Training'}
       </button>
       {isTraining && <p>Training in progress... Please check console for logs.</p>}
+
+      {lossHistory.length > 0 && (
+        <div className="mt-4">
+          <Line options={chartOptions} data={chartData} />
+        </div>
+      )}
     </div>
   );
 }
