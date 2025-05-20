@@ -29,8 +29,8 @@ const INPUT_DIM = 2;
 const HIDDEN_DIM = 20;
 const OUTPUT_DIM = 1;
 const SEED = 0;
-const LR = 0.05;
-const EPOCHS = 100;
+const LR = 0.075;
+const EPOCHS = 500;
 const BATCH_SIZE = 4;
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -69,7 +69,7 @@ export default function NeuralNetwork() {
 
     const layer_types_values: LayerType[] = [
       LayerType.LAYER_TYPE_DENSE,
-      LayerType.LAYER_TYPE_ACTIVATION_TANH,
+      LayerType.LAYER_TYPE_ACTIVATION_RELU,
       LayerType.LAYER_TYPE_DENSE,
       LayerType.LAYER_TYPE_ACTIVATION_SIGMOID,
     ];
@@ -108,7 +108,7 @@ export default function NeuralNetwork() {
     const _model = new WModel(wasmInstance, modelPtr);
     modelRef.current = _model;
 
-    wasmInstance.nn_initialize_weights_xavier_uniform(modelPtr);
+    wasmInstance.nn_initialize_weights_he_uniform(modelPtr);
     wasmInstance.nn_initialize_biases_zero(modelPtr);
 
     const _trainConfig = new WTrainConfig(wasmInstance, {
