@@ -683,10 +683,9 @@ void train_model(
             }
         }
 
-        // float average_epoch_loss = (train_data->num_samples > 0) ? (epoch_loss / train_data->num_samples) : 0.0f;
+        float average_training_loss_for_epoch = (train_data->num_samples > 0) ? (epoch_loss / train_data->num_samples) : 0.0f;
         
-        // Optional: Validation pass
-        float validation_loss = -1.0f; // Signify not computed
+        float calculated_validation_loss = -1.0f; // Signify not computed
         if (validation_data && validation_data->num_samples > 0) {
             float val_loss_sum = 0.0f;
             for (int k = 0; k < validation_data->num_samples; ++k) {
@@ -696,23 +695,14 @@ void train_model(
                 const float* val_prediction = predict(model, val_input);
                 val_loss_sum += config->_compute_loss_func(val_prediction, val_target, model->model_output_dim);
             }
-            // validation_loss = val_loss_sum / validation_data->num_samples;
-            // For now, we just calculate it if validation_data is provided, but don't assign to unused validation_loss
-            // If callbacks or printing are re-enabled, this value can be used.
-            // Example: float calculated_validation_loss = val_loss_sum / validation_data->num_samples;
+            calculated_validation_loss = (validation_data->num_samples > 0) ? (val_loss_sum / validation_data->num_samples) : -1.0f;
         }
 
-        // Optional: Epoch completed callback or print progress
-        // if (config->epoch_completed_callback) {
-        //     config->epoch_completed_callback(epoch + 1, average_epoch_loss, validation_loss);
-        // }
-        // else {
-        //     printf("Epoch [%d/%d], Training Loss: %f", epoch + 1, config->epochs, average_epoch_loss);
-        //     if (validation_data && validation_data->num_samples > 0) {
-        //         printf(", Validation Loss: %f", validation_loss);
-        //     }
-        //     printf("\n");
-        // }
+
+        // Call the epoch completed callback if provided
+        if (config->epoch_callback_func) {
+            config->epoch_callback_func(epoch + 1, average_training_loss_for_epoch, calculated_validation_loss, config->epoch_callback_user_data);
+        }
     }
 }
 

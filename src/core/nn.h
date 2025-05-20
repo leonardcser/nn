@@ -54,6 +54,13 @@ typedef float (*ComputeLossPtr)(const float* predictions, const float* targets, 
 // For CrossEntropyWithSoftmax, this will be dL/dz_last_layer (predictions - targets).
 typedef void (*LossDerivativePtr)(const float* predictions, const float* targets, float* out_delta, int size);
 
+// Epoch Completed Callback:
+// Called after each epoch during training.
+// - epoch: The completed epoch number (1-indexed).
+// - training_loss: Average training loss for the completed epoch.
+// - validation_loss: Average validation loss for the completed epoch (-1.0f if not applicable).
+// - user_data: Arbitrary user data pointer passed from TrainConfig.
+typedef void (*EpochCompletedCallback)(int epoch, float training_loss, float validation_loss, void* user_data);
 
 // Layer-specific operations (assigned during layer creation)
 // `self` is a pointer to the Layer struct itself.
@@ -163,7 +170,9 @@ struct __attribute__((packed)) TrainConfig {
     LossDerivativePtr _loss_derivative_func; // e.g., derivative_mean_squared_error
 
     // Optional: Callback after each epoch
-    // void (*epoch_completed_callback)(int epoch, float training_loss, float validation_loss);
+    EpochCompletedCallback epoch_callback_func;
+    void* epoch_callback_user_data;
+
     int print_progress_every_n_batches; // 0 to disable
 };
 

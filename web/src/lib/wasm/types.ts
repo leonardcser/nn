@@ -116,6 +116,9 @@ export interface TrainConfig {
   loss_type: LossFunctionType; // enum
   _compute_loss_func: number; // ComputeLossPtr
   _loss_derivative_func: number; // LossDerivativePtr
+  // Optional: Callback after each epoch
+  epoch_callback_func: number; // EpochCompletedCallback (function pointer)
+  epoch_callback_user_data: number; // void*
   print_progress_every_n_batches: number; // int
 }
 

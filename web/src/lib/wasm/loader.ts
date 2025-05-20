@@ -170,7 +170,6 @@ export async function wasmFetcher(url: string): Promise<WasmExports> {
             memoryView.setBigUint64(time_ptr, now_ns, true);
             return 0; // Success
           }
-          // TODO: Handle other clock IDs like CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_THREAD_CPUTIME_ID
           console.warn(`clock_time_get called for unhandled clock_id: ${clock_id}`);
           return 28; // WASI errno for EINVAL (Invalid argument)
         },
@@ -187,6 +186,8 @@ export async function wasmFetcher(url: string): Promise<WasmExports> {
         `Wasm module did not export the following symbols: ${missingSymbols.join(', ')}`
       );
     }
+
+    console.log('instance', instance);
 
     for (const key in exports) {
       if (typeof exports[key] === 'function') {
