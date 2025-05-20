@@ -10,7 +10,6 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Line } from 'react-chartjs-2';
 import {
   wasmFetcher,
   type WasmExports,
@@ -18,8 +17,10 @@ import {
   WTrainConfig,
   WDataset,
   WFloat32Array,
-  WPointer,
+  LayerType,
+  LossFunctionType,
 } from '../wasm';
+import { WInt32Array } from '../wasm/array';
 import { cn } from '../utils';
 
 const XOR_XDATA = [0, 0, 0, 1, 1, 0, 1, 1];
@@ -41,8 +42,6 @@ export default function NeuralNetwork() {
   );
 
   const [isTraining, setIsTraining] = useState(false);
-  const [lossData, setLossData] = useState<number[]>([]);
-  const [currentEpoch, setCurrentEpoch] = useState(0);
 
   const wasmInstanceRef = useRef(wasmInstance);
   const modelRef = useRef<WModel | null>(null);
@@ -50,6 +49,8 @@ export default function NeuralNetwork() {
   const datasetRef = useRef<WDataset | null>(null);
   const xSamplesArrayRef = useRef<WFloat32Array | null>(null);
   const yTargetsArrayRef = useRef<WFloat32Array | null>(null);
+  const layerTypesArrayRef = useRef<WInt32Array | null>(null);
+  const layerParamsArrayRef = useRef<WInt32Array | null>(null);
 
   useEffect(() => {
     wasmInstanceRef.current = wasmInstance;
@@ -60,69 +61,86 @@ export default function NeuralNetwork() {
       return;
     }
 
-    wasmInstance.nn_seed(SEED);
+    wasmInstance.nn_seed_random_generator(SEED);
 
     const inputDim = INPUT_DIM;
     const hiddenDim = HIDDEN_DIM;
     const outputDim = OUTPUT_DIM;
 
-    // Use WPointer to manage the model pointer holder
-    const modelPtrHolder = new WPointer(wasmInstance);
+    const layer_types_values: LayerType[] = [
+      LayerType.LAYER_TYPE_DENSE,
+      LayerType.LAYER_TYPE_ACTIVATION_TANH,
+      LayerType.LAYER_TYPE_DENSE,
+      LayerType.LAYER_TYPE_ACTIVATION_SIGMOID,
+    ];
+    const layer_params_values: number[] = [hiddenDim, 0, outputDim, 0];
 
-    try {
-      const createSuccess = wasmInstance.nn_create_model(
-        modelPtrHolder.ptr(),
-        inputDim,
-        hiddenDim,
-        outputDim
-      );
+    const _layerTypesArray = new WInt32Array(
+      wasmInstance,
+      layer_types_values.length,
+      new Int32Array(layer_types_values)
+    );
+    layerTypesArrayRef.current = _layerTypesArray;
 
-      if (!createSuccess) {
-        console.error('nn_create_model returned false (C++ model creation failed).');
-        return; // Early exit
-      }
+    const _layerParamsArray = new WInt32Array(
+      wasmInstance,
+      layer_params_values.length,
+      new Int32Array(layer_params_values)
+    );
+    layerParamsArrayRef.current = _layerParamsArray;
 
-      const actualModelPtr = modelPtrHolder.get();
+    const modelPtr = wasmInstance.nn_create_model(
+      inputDim,
+      layer_types_values.length,
+      _layerTypesArray.ptr(),
+      _layerParamsArray.ptr()
+    );
 
-      if (actualModelPtr === 0) {
-        console.error('nn_create_model succeeded but returned a null model pointer.');
-        return; // Early exit
-      }
-
-      const _model = new WModel(wasmInstance, actualModelPtr);
-      modelRef.current = _model;
-
-      const _trainConfig = new WTrainConfig(wasmInstance, {
-        learning_rate: LR,
-        epochs: EPOCHS,
-        batch_size: BATCH_SIZE,
-      });
-      trainConfigRef.current = _trainConfig;
-
-      const numSamples = BATCH_SIZE;
-      const inputDimPerSample = inputDim;
-      const outputDimPerSample = outputDim;
-
-      const _xSamplesArray = new WFloat32Array(wasmInstance, numSamples * inputDimPerSample);
-      _xSamplesArray.set(new Float32Array(XOR_XDATA));
-      xSamplesArrayRef.current = _xSamplesArray;
-
-      const _yTargetsArray = new WFloat32Array(wasmInstance, numSamples * outputDimPerSample);
-      _yTargetsArray.set(new Float32Array(XOR_YDATA));
-      yTargetsArrayRef.current = _yTargetsArray;
-
-      const _dataset = new WDataset(wasmInstance, {
-        num_samples: numSamples,
-        input_dim_per_sample: inputDimPerSample,
-        output_dim_per_sample: outputDimPerSample,
-        X_samples: _xSamplesArray.ptr(),
-        Y_targets: _yTargetsArray.ptr(),
-      });
-      datasetRef.current = _dataset;
-    } finally {
-      // Free the memory used for the holder itself, as it's no longer needed
-      modelPtrHolder.free();
+    if (modelPtr === 0) {
+      console.error('nn_create_model failed: returned a null model pointer.');
+      _layerTypesArray.free();
+      _layerParamsArray.free();
+      layerTypesArrayRef.current = null;
+      layerParamsArrayRef.current = null;
+      return;
     }
+
+    const _model = new WModel(wasmInstance, modelPtr);
+    modelRef.current = _model;
+
+    wasmInstance.nn_initialize_weights_xavier_uniform(modelPtr);
+    wasmInstance.nn_initialize_biases_zero(modelPtr);
+
+    const _trainConfig = new WTrainConfig(wasmInstance, {
+      learning_rate: LR,
+      epochs: EPOCHS,
+      batch_size: BATCH_SIZE,
+      random_seed: SEED,
+      loss_type: LossFunctionType.LOSS_MEAN_SQUARED_ERROR,
+      _compute_loss_func: 0,
+      _loss_derivative_func: 0,
+      print_progress_every_n_batches: 1,
+    });
+    trainConfigRef.current = _trainConfig;
+
+    const numSamples = XOR_YDATA.length;
+
+    const _xSamplesArray = new WFloat32Array(wasmInstance, numSamples * inputDim);
+    _xSamplesArray.set(new Float32Array(XOR_XDATA));
+    xSamplesArrayRef.current = _xSamplesArray;
+
+    const _yTargetsArray = new WFloat32Array(wasmInstance, numSamples * outputDim);
+    _yTargetsArray.set(new Float32Array(XOR_YDATA));
+    yTargetsArrayRef.current = _yTargetsArray;
+
+    const _dataset = new WDataset(wasmInstance, {
+      num_samples: numSamples,
+      input_dim: inputDim,
+      output_dim: outputDim,
+      _inputs_flat: _xSamplesArray.ptr(),
+      _targets_flat: _yTargetsArray.ptr(),
+    });
+    datasetRef.current = _dataset;
 
     return () => {
       modelRef.current?.free();
@@ -130,6 +148,8 @@ export default function NeuralNetwork() {
       datasetRef.current?.free();
       xSamplesArrayRef.current?.free();
       yTargetsArrayRef.current?.free();
+      layerTypesArrayRef.current?.free();
+      layerParamsArrayRef.current?.free();
     };
   }, [wasmInstance]);
 
@@ -145,47 +165,52 @@ export default function NeuralNetwork() {
     }
 
     setIsTraining(true);
-    setLossData([]);
-    setCurrentEpoch(0);
 
-    const trainConfigData = currentTrainConfig.data();
-    const datasetData = currentDataset.data();
+    console.log('Starting training...');
+    try {
+      currentWasmInstance.nn_train_model(
+        currentModel.ptr(),
+        currentDataset.ptr(),
+        currentTrainConfig.ptr(),
+        0
+      );
+      console.log('Training complete.');
 
-    const epochs = trainConfigData.epochs;
-    const batchSize = trainConfigData.batch_size;
-    const numSamples = datasetData.num_samples;
-    const numBatches = Math.ceil(numSamples / batchSize);
+      if (xSamplesArrayRef.current && modelRef.current) {
+        console.log('Predictions after training:');
+        const xData = XOR_XDATA;
+        const inputDim = INPUT_DIM;
+        const outputDim = OUTPUT_DIM;
+        const singleInputArray = new WFloat32Array(currentWasmInstance, inputDim);
+        const predictionsArray = new WFloat32Array(currentWasmInstance, outputDim);
 
-    for (let epoch = 0; epoch < epochs; epoch++) {
-      setCurrentEpoch(epoch + 1);
-      for (let batchIdx = 0; batchIdx < numBatches; batchIdx++) {
-        const loss = currentWasmInstance.nn_step(
-          currentModel.ptr(),
-          currentTrainConfig.ptr(),
-          currentDataset.ptr(),
-          batchIdx
-        );
-        console.log('loss', loss);
-        setLossData((prevLossData) => [...prevLossData, loss]);
+        for (let i = 0; i < xData.length / inputDim; i++) {
+          const sampleInput = new Float32Array(xData.slice(i * inputDim, (i + 1) * inputDim));
+          singleInputArray.set(sampleInput);
 
-        // Wait for 500ms before the next step
-        await new Promise((resolve) => setTimeout(resolve, 100));
+          const outputPtr = currentWasmInstance.nn_predict(
+            modelRef.current.ptr(),
+            singleInputArray.ptr()
+          );
+
+          const predictionResult = new Float32Array(
+            currentWasmInstance.memory.buffer,
+            outputPtr,
+            outputDim
+          );
+
+          console.log(
+            `Input: [${sampleInput.join(', ')}], Output: [${predictionResult.join(', ')}] (Expected: ${XOR_YDATA[i]})`
+          );
+        }
+        singleInputArray.free();
+        predictionsArray.free();
       }
+    } catch (error) {
+      console.error('Error during training:', error);
+    } finally {
+      setIsTraining(false);
     }
-    setIsTraining(false);
-  };
-
-  const chartData = {
-    labels: lossData.map((_, i) => `Step ${i + 1}`),
-    datasets: [
-      {
-        label: 'Training Loss',
-        data: lossData,
-        fill: false,
-        borderColor: 'oklch(62.3% 0.214 259.815)',
-        tension: 0.1,
-      },
-    ],
   };
 
   return (
@@ -199,12 +224,7 @@ export default function NeuralNetwork() {
       >
         {isTraining ? 'Training...' : 'Start Training'}
       </button>
-      {isTraining && <p>Epoch: {currentEpoch}</p>}
-      {lossData.length > 0 && (
-        <div className="mt-4">
-          <Line data={chartData} />
-        </div>
-      )}
+      {isTraining && <p>Training in progress... Please check console for logs.</p>}
     </div>
   );
 }
