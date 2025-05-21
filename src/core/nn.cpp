@@ -1,5 +1,5 @@
 #include "nn.h"
-#include "../wasm/utility.cpp"
+#include "../wasm/utility.h"
 
 #include <algorithm> // For std::shuffle, std::fill, std::transform
 #include <cmath>     // For std::sqrt, std::exp, std::tanh, std::max, std::fabs
