@@ -1,18 +1,16 @@
-#include <stdlib.h>
 #include <emscripten.h>
+#include <stdlib.h>
 
 extern "C" {
 
 // Generic memory allocation utilities
 EMSCRIPTEN_KEEPALIVE
-void* allocate_memory(size_t size) {
-    void* ptr = malloc(size);
+void *allocate_memory(size_t size) {
+    void *ptr = malloc(size);
     return ptr;
 }
 
 EMSCRIPTEN_KEEPALIVE
-void free_memory(void* ptr) {
-    free(ptr);
-}
+void free_memory(void *ptr) { free(ptr); }
 
-} // extern "C" 
+} // extern "C"
