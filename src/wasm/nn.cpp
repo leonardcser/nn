@@ -83,4 +83,11 @@ const float *nn_predict(nn::Model *model, const float *input_sample) {
     return nn::predict(model, input_sample);
 }
 
+EMSCRIPTEN_KEEPALIVE
+const float *nn_get_layer_output_activations(const nn::Model *model,
+                                             int layer_index,
+                                             int *out_activation_size) {
+    return nn::get_layer_output_activations(model, layer_index, out_activation_size);
+}
+
 } // extern "C"

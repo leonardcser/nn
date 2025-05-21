@@ -923,4 +923,32 @@ const float *predict(Model *model, const float *input_sample) {
     return model->_final_output_buffer;
 }
 
+const float *get_layer_output_activations(const Model *model, int layer_index,
+                                      int *out_activation_size) {
+    if (!model || !out_activation_size) {
+        if (out_activation_size) *out_activation_size = 0;
+        return nullptr;
+    }
+    if (layer_index < 0 || layer_index >= model->num_layers) {
+        *out_activation_size = 0;
+        return nullptr;
+    }
+
+    const Layer *layer = &model->_layers[layer_index];
+    
+    // _last_output_activations for a layer is set during model_forward_pass.
+    // It points to the buffer (either _forward_buffer1 or _forward_buffer2, or _final_output_buffer if it's the last layer)
+    // that holds the output of that layer after its _forward_pass function executed.
+    if (layer->_last_output_activations) {
+        *out_activation_size = layer->output_size;
+        return layer->_last_output_activations;
+    } else {
+        // This case might happen if model_forward_pass hasn't populated it correctly
+        // or if the layer itself doesn't produce a distinct output buffer that is tracked this way
+        // (though current design implies it should).
+        *out_activation_size = 0;
+        return nullptr;
+    }
+}
+
 } // namespace nn

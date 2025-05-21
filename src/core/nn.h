@@ -312,6 +312,16 @@ const float *get_model_output(const Model *model);
 // Convenience function: performs forward pass and returns output pointer.
 const float *predict(Model *model, const float *input_sample);
 
+// Returns a pointer to the activation data of a specific layer after a forward pass.
+// The content of this buffer is valid until the next call to model_forward_pass
+// or predict on the same model for the same input sample.
+// The caller should NOT free this pointer. The data points to an internal buffer of the model.
+// - model: The model.
+// - layer_index: 0-based index of the layer.
+// - out_activation_size: Pointer to an int where the size of the activation array will be stored.
+// Returns NULL (0) if layer_index is invalid or activations are not available.
+const float* get_layer_output_activations(const Model* model, int layer_index, int* out_activation_size);
+
 //------------------------------------------------------------------------------
 // Pre-defined Activation Functions & Derivatives (Implementations in .cpp)
 //------------------------------------------------------------------------------

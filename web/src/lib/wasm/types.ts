@@ -41,6 +41,11 @@ export interface WasmExports {
   ) => number; // returns float (average batch loss)
   nn_get_model_output: (model_ptr: number) => number; // returns float*
   nn_predict: (model_ptr: number, input_sample_ptr: number) => number; // returns float*
+  nn_get_layer_output_activations: (
+    model_ptr: number,
+    layer_index: number,
+    out_activation_size_ptr: number // int*
+  ) => number; // returns float*
 
   // JS defined functions
   register_callback: (func: (data?: DataView) => void) => number;
@@ -66,6 +71,7 @@ export const WASM_SYMBOLS: WasmSymbol[] = [
   'nn_step_model',
   'nn_get_model_output',
   'nn_predict',
+  'nn_get_layer_output_activations',
 ] as const;
 
 export enum FieldType {

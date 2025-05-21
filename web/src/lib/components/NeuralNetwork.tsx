@@ -11,6 +11,7 @@ import {
   WFloat32Array,
   LayerType,
   LossFunctionType,
+  type Model as ModelDescriptor,
 } from '../wasm';
 import { WInt32Array } from '../wasm/array';
 import { cn } from '../utils';
@@ -43,6 +44,11 @@ export default function NeuralNetwork() {
   const [trainedModel, setTrainedModel] = useState<WModel | null>(null);
   const modelRef = useRef<WModel | null>(null);
   const [numDenseLayers, setNumDenseLayers] = useState(DEFAULT_DENSE_LAYERS);
+  const [layerActivations, setLayerActivations] = useState<
+    { name: string; activations: number[][] }[]
+  >([]);
+  const [activationInput, setActivationInput] = useState<number[] | null>(null);
+  const layerTypesRef = useRef<{ name: string; type: LayerType }[]>([]);
 
   const startTraining = async () => {
     if (!wasmInstance) {
@@ -51,7 +57,9 @@ export default function NeuralNetwork() {
     }
 
     setIsTraining(true);
-    setLossHistory([]); // Reset loss history at the start of training
+    setLossHistory([]);
+    setLayerActivations([]);
+    setActivationInput(null);
     console.log('Starting training...');
 
     let model: WModel | null = null;
@@ -62,7 +70,6 @@ export default function NeuralNetwork() {
     let layerTypesArray: WInt32Array | null = null;
     let layerParamsArray: WInt32Array | null = null;
     let singleInputArray: WFloat32Array | null = null;
-    // predictionsArray is created and freed within the loop, no need for module-level temporary variable.
 
     try {
       wasmInstance.nn_seed_random_generator(SEED);
@@ -70,23 +77,33 @@ export default function NeuralNetwork() {
       const inputDim = INPUT_DIM;
       const outputDim = OUTPUT_DIM;
 
-      // Build layer types and params dynamically
       const layer_types_values: LayerType[] = [];
       const layer_params_values: number[] = [];
       for (let i = 0; i < numDenseLayers; i++) {
         layer_types_values.push(LayerType.LAYER_TYPE_DENSE);
         layer_params_values.push(hiddenDim);
-        // Add ReLU after each dense except the last
         if (i < numDenseLayers - 1) {
           layer_types_values.push(LayerType.LAYER_TYPE_ACTIVATION_RELU);
           layer_params_values.push(0);
         }
       }
-      // Output layer
       layer_types_values.push(LayerType.LAYER_TYPE_DENSE);
       layer_params_values.push(outputDim);
       layer_types_values.push(LayerType.LAYER_TYPE_ACTIVATION_SIGMOID);
       layer_params_values.push(0);
+
+      layerTypesRef.current = layer_types_values.map((type, index) => {
+        let name = LayerType[type] || `Layer ${index}`;
+        if (type === LayerType.LAYER_TYPE_DENSE) {
+          const nextType = layer_types_values[index + 1];
+          if (nextType === LayerType.LAYER_TYPE_ACTIVATION_RELU) name = `Dense (-> ReLU)`;
+          else if (nextType === LayerType.LAYER_TYPE_ACTIVATION_SIGMOID)
+            name = `Dense (-> Sigmoid)`;
+          else name = `Dense (Output)`;
+        } else if (type === LayerType.LAYER_TYPE_ACTIVATION_RELU) name = `ReLU Activation`;
+        else if (type === LayerType.LAYER_TYPE_ACTIVATION_SIGMOID) name = `Sigmoid Activation`;
+        return { name, type };
+      });
 
       layerTypesArray = new WInt32Array(
         wasmInstance,
@@ -109,7 +126,6 @@ export default function NeuralNetwork() {
 
       if (modelPtr === 0) {
         console.error('nn_create_model failed: returned a null model pointer.');
-        // Early exit, finally block will clean up initialized arrays
         return;
       }
 
@@ -159,9 +175,7 @@ export default function NeuralNetwork() {
       if (xSamplesArray && model) {
         console.log('Predictions after training:');
         const xData = XOR_XDATA;
-        // inputDim and outputDim are already defined above
         singleInputArray = new WFloat32Array(wasmInstance, inputDim);
-        // predictionsArray is created inside the loop
 
         for (let i = 0; i < xData.length / inputDim; i++) {
           const sampleInput = new Float32Array(xData.slice(i * inputDim, (i + 1) * inputDim));
@@ -169,30 +183,23 @@ export default function NeuralNetwork() {
 
           const outputPtr = wasmInstance.nn_predict(model.ptr(), singleInputArray.ptr());
 
-          // Create and use predictionsArray locally within the loop iteration
-          // const predictionsArrayLocal = new WFloat32Array(wasmInstance, outputDim, outputPtr);
-          // We don't own outputPtr, so we should copy data if we need it after this scope
-          // or ensure WFloat32Array handles this correctly if it's just a view.
-          // Assuming WFloat32Array with a ptr argument creates a view and doesn't own the memory.
-          // For logging, directly accessing memory.buffer is fine.
           const predictionResult = new Float32Array(
             wasmInstance.memory.buffer,
-            outputPtr, // outputPtr from nn_predict is the direct pointer to the result
+            outputPtr,
             outputDim
           );
 
           console.log(
             `Input: [${sampleInput.join(', ')}], Output: [${predictionResult.join(', ')}] (Expected: ${XOR_YDATA[i]})`
           );
-          // predictionsArrayLocal is a view, no need to free if it doesn't own memory.
-          // If nn_predict allocates new memory for each prediction, that memory should be freed by a wasm function.
-          // Assuming nn_predict returns a pointer to an internal buffer that is reused or managed by the model.
         }
       }
-      setTrainedModel(model); // Save model for prediction
-      model = null; // Prevent double free in finally
+      setTrainedModel(model);
+      model = null;
     } catch (error) {
       console.error('Error during training or prediction:', error);
+      setTrainedModel(null);
+      modelRef.current = null;
     } finally {
       console.log('Cleaning up WASM objects...');
       if (model) model.free();
@@ -203,10 +210,82 @@ export default function NeuralNetwork() {
       layerTypesArray?.free();
       layerParamsArray?.free();
       singleInputArray?.free();
-      // predictionsArray was scoped locally or handled if it was a view.
 
       setIsTraining(false);
       console.log('Cleanup complete.');
+    }
+  };
+
+  const fetchAndSetActivations = async (input: number[]) => {
+    if (!trainedModel || !wasmInstance || trainedModel.isFreed()) {
+      console.error('Trained model or Wasm instance not available for activations.');
+      setLayerActivations([]);
+      setActivationInput(null);
+      return;
+    }
+    setActivationInput(input);
+
+    let singleInputArray: WFloat32Array | null = null;
+    let outSizePtr: number | null = null;
+
+    try {
+      console.log(`Fetching activations for input: [${input.join(', ')}]`);
+      singleInputArray = new WFloat32Array(wasmInstance, input.length);
+      singleInputArray.set(new Float32Array(input));
+      const predictionOutputPtr = wasmInstance.nn_predict(
+        trainedModel.ptr(),
+        singleInputArray.ptr()
+      );
+
+      const numLayers = layerTypesRef.current.length;
+      if (numLayers === 0) {
+        console.error('Number of layers is zero, cannot fetch activations.');
+        setLayerActivations([]);
+        return;
+      }
+
+      const activationsByLayer: { name: string; activations: number[][] }[] = [];
+      outSizePtr = wasmInstance.allocate_memory(4);
+
+      for (let i = 0; i < numLayers; i++) {
+        const activationsPtr = wasmInstance.nn_get_layer_output_activations(
+          trainedModel.ptr(),
+          i,
+          outSizePtr
+        );
+
+        const activationSize = new DataView(wasmInstance.memory.buffer).getInt32(outSizePtr, true);
+
+        if (activationsPtr !== 0 && activationSize > 0) {
+          const activationsArray = new Float32Array(
+            wasmInstance.memory.buffer,
+            activationsPtr,
+            activationSize
+          );
+          activationsByLayer.push({
+            name: layerTypesRef.current[i]?.name || `Layer ${i}`,
+            activations: [Array.from(activationsArray)],
+          });
+        } else {
+          console.warn(
+            `No activations for layer ${i} (size: ${activationSize}, ptr: ${activationsPtr})`
+          );
+          activationsByLayer.push({
+            name: layerTypesRef.current[i]?.name || `Layer ${i}`,
+            activations: [[]],
+          });
+        }
+      }
+      setLayerActivations(activationsByLayer);
+      console.log('Activations fetched:', activationsByLayer);
+    } catch (error) {
+      console.error('Error fetching activations:', error);
+      setLayerActivations([]);
+    } finally {
+      singleInputArray?.free();
+      if (outSizePtr !== null) {
+        wasmInstance.free_memory(outSizePtr);
+      }
     }
   };
 
@@ -234,11 +313,8 @@ export default function NeuralNetwork() {
   };
 
   return (
-    <div
-      className={cn('opacity-0 transition-opacity duration-300 p-4', wasmInstance && 'opacity-100')}
-    >
+    <div className={cn('opacity-0 transition-opacity duration-300', wasmInstance && 'opacity-100')}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        {/* Left: Sliders and Plot */}
         <div>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
@@ -346,7 +422,6 @@ export default function NeuralNetwork() {
           </button>
           {isTraining && <p>Training in progress... Please check console for logs.</p>}
         </div>
-        {/* Right: Predictions Table */}
         <div className="flex flex-col items-center">
           <div className="w-full max-w-lg">
             <h3 className="text-lg font-semibold mb-2 text-center text-gray-700 dark:text-gray-200">
@@ -374,8 +449,9 @@ export default function NeuralNetwork() {
                   [0, 1].map((i2) => {
                     const expected = i1 ^ i2;
                     let predicted: string | null = null;
-                    if (trainedModel && wasmInstance) {
-                      // Predict for this input
+                    const currentInput = [i1, i2];
+
+                    if (trainedModel && wasmInstance && !trainedModel.isFreed()) {
                       const inputArray = new WFloat32Array(wasmInstance, 2);
                       inputArray.set(new Float32Array([i1, i2]));
                       const outputPtr = wasmInstance.nn_predict(
@@ -393,7 +469,19 @@ export default function NeuralNetwork() {
                     return (
                       <tr
                         key={`${i1}-${i2}`}
-                        className="text-center border-b border-gray-200 dark:border-gray-700"
+                        className={cn(
+                          'text-center border-b border-gray-200 dark:border-gray-700',
+                          trainedModel &&
+                            wasmInstance &&
+                            !trainedModel.isFreed() &&
+                            'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600'
+                        )}
+                        onClick={() =>
+                          trainedModel &&
+                          wasmInstance &&
+                          !trainedModel.isFreed() &&
+                          fetchAndSetActivations(currentInput)
+                        }
                       >
                         <td className="px-4 py-2">{i1}</td>
                         <td className="px-4 py-2">{i2}</td>
@@ -427,6 +515,45 @@ export default function NeuralNetwork() {
             style={{ width: '100%', height: '100%' }}
             useResizeHandler={true}
           />
+        </div>
+      )}
+      {layerActivations.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-4 text-center text-gray-700 dark:text-gray-200">
+            Layer Activations {activationInput ? `for Input: [${activationInput.join(', ')}]` : ''}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {layerActivations.map((layerData, index) => (
+              <div key={index} className="border rounded-lg p-2 shadow">
+                <h4 className="text-md font-medium mb-1 text-center">{layerData.name}</h4>
+                {layerData.activations[0] && layerData.activations[0].length > 0 ? (
+                  <Plot
+                    data={[
+                      {
+                        z: layerData.activations,
+                        type: 'heatmap',
+                        colorscale: 'Viridis',
+                        showscale: layerData.activations[0].length > 1,
+                        xgap: 1,
+                        ygap: 1,
+                      },
+                    ]}
+                    layout={{
+                      autosize: true,
+                      margin: { t: 10, b: 10, l: 5, r: 5 },
+                      xaxis: { visible: false, ticks: '', showticklabels: false },
+                      yaxis: { visible: false, ticks: '', showticklabels: false },
+                      height: 50,
+                    }}
+                    style={{ width: '100%', height: 'auto' }}
+                    config={{ displayModeBar: false }}
+                  />
+                ) : (
+                  <p className="text-xs text-gray-500 text-center italic">No activation data</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
